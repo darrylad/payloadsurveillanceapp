@@ -594,7 +594,7 @@ class _LoadcellDataPageState extends State<LoadcellDataPage> {
               width: 160,
               alignment: Alignment.center,
               child: Text(
-                '${weight.toStringAsFixed(1)} kg',
+                '${weight.toStringAsFixed(1)} g',
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 24,
@@ -650,7 +650,7 @@ class _LoadcellDataPageState extends State<LoadcellDataPage> {
           ),
           const Spacer(),
           Text(
-            '${_totalWeight.toStringAsFixed(1)} kg',
+            '${_totalWeight.toStringAsFixed(1)} g',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 26,
