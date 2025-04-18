@@ -381,7 +381,7 @@ class _LoadcellDataPageState extends State<LoadcellDataPage> {
 
   String _date = '--';
   String _time = '--';
-  int _systemTime = 0;
+  String _systemTime = '--';
   double _totalWeight = 0.0;
   double _weight1 = 0.0;
   double _weight2 = 0.0;
@@ -399,7 +399,7 @@ class _LoadcellDataPageState extends State<LoadcellDataPage> {
         setState(() {
           _date = data['date']?.toString() ?? '--';
           _time = data['time']?.toString() ?? '--';
-          _systemTime = data['systemTime'] ?? 0;
+          _systemTime = data['systemTime'].toString() ?? '--';
           _totalWeight = double.parse((data['totalWeight'] ?? 0).toString());
           _weight1 = double.parse((data['weight1'] ?? 0).toString());
           _weight2 = double.parse((data['weight2'] ?? 0).toString());
