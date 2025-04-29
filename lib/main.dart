@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:payloadsurveillanceapp/firebase_options.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:async';
+import 'package:payloadsurveillanceapp/graph_data_service.dart';
+import 'package:payloadsurveillanceapp/maps_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,7 +40,11 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
 
-  final List<Widget> _pages = [const LoadcellDataPage(), const GraphsPage()];
+  final List<Widget> _pages = [
+    const LoadcellDataPage(),
+    const GraphsPage(),
+    const MapPage(), // Add the new map page
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +65,7 @@ class _MainScreenState extends State<MainScreen> {
         selectedIndex: _selectedIndex,
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.scale_outlined),
+            icon: Icon(Icons.dashboard),
             selectedIcon: Icon(Icons.dashboard),
             label: 'Stats',
           ),
@@ -67,6 +73,11 @@ class _MainScreenState extends State<MainScreen> {
             icon: Icon(Icons.bar_chart_outlined),
             selectedIcon: Icon(Icons.bar_chart),
             label: 'Graphs',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.map_outlined),
+            selectedIcon: Icon(Icons.map),
+            label: 'Map',
           ),
         ],
       ),
@@ -82,107 +93,59 @@ class GraphsPage extends StatefulWidget {
 }
 
 class _GraphsPageState extends State<GraphsPage> {
-  // Firebase reference
-  final DatabaseReference _databaseRef = FirebaseDatabase.instance.ref().child(
-    'loadcell',
-  );
+  // Use the singleton service
+  final GraphDataService _graphDataService = GraphDataService();
 
-  // Add this line to store the stream subscription
-  StreamSubscription<DatabaseEvent>? _dataSubscription;
+  // Local subscription to data updates
+  StreamSubscription<bool>? _updateSubscription;
 
-  // Data for charts
-  final List<FlSpot> _weight1Spots = [];
-  final List<FlSpot> _weight2Spots = [];
-  final List<FlSpot> _totalWeightSpots = [];
-
-  // Maximum number of data points to keep
-  final int _maxDataPoints = 20;
-
-  // Timer for updates
-  Timer? _timer;
-
-  // For x-axis time tracking (seconds since start)
-  int _startTime = 0;
+  // Local state to trigger rebuilds
+  bool _hasData = false;
 
   @override
   void initState() {
     super.initState();
 
-    // Start timestamp
-    _startTime = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    // Initialize the service if not already initialized
+    _graphDataService.initialize();
 
-    // Listen for real-time updates
-    _setupDatabaseListener();
-
-    // Set up timer for regular updates (every 10 seconds)
-    _timer = Timer.periodic(const Duration(seconds: 10), (timer) {
+    // Listen for data updates to rebuild the UI
+    _updateSubscription = _graphDataService.onUpdate.listen((_) {
       if (mounted) {
-        _databaseRef.get().then((snapshot) {
-          if (snapshot.value != null && mounted) {
-            _updateChartData(snapshot.value as Map<dynamic, dynamic>);
-          }
+        setState(() {
+          _hasData = _graphDataService.weight1Spots.isNotEmpty;
         });
       }
     });
+
+    // Set initial state
+    _hasData = _graphDataService.weight1Spots.isNotEmpty;
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
-    _dataSubscription?.cancel();
+    // Only cancel our update subscription, not the service itself
+    _updateSubscription?.cancel();
     super.dispose();
-  }
-
-  void _setupDatabaseListener() {
-    _dataSubscription = _databaseRef.onValue.listen((event) {
-      if (event.snapshot.value != null && mounted) {
-        _updateChartData(event.snapshot.value as Map<dynamic, dynamic>);
-      }
-    });
-  }
-
-  void _updateChartData(Map<dynamic, dynamic> data) {
-    if (!mounted) return;
-
-    final currentTime = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final timePoint = (currentTime - _startTime).toDouble();
-
-    setState(() {
-      final weight1 = double.parse((data['weight1'] ?? 0).toString());
-      final weight2 = double.parse((data['weight2'] ?? 0).toString());
-      final totalWeight = double.parse((data['totalWeight'] ?? 0).toString());
-
-      // Add new data points
-      _weight1Spots.add(FlSpot(timePoint, weight1));
-      _weight2Spots.add(FlSpot(timePoint, weight2));
-      _totalWeightSpots.add(FlSpot(timePoint, totalWeight));
-
-      // Limit to max data points
-      if (_weight1Spots.length > _maxDataPoints) {
-        _weight1Spots.removeAt(0);
-        _weight2Spots.removeAt(0);
-        _totalWeightSpots.removeAt(0);
-      }
-    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF2C3E50),
+      backgroundColor: const Color.fromARGB(255, 18, 32, 47),
       appBar: AppBar(
         title: const Text(
           "Weight Graphs",
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: const Color(0xFF34495E),
+        backgroundColor: const Color.fromARGB(255, 33, 53, 73),
         foregroundColor: Colors.white,
         centerTitle: true,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child:
-            _weight1Spots.isEmpty
+            !_hasData
                 ? const Center(
                   child: Text(
                     'Waiting for data...',
@@ -194,7 +157,7 @@ class _GraphsPageState extends State<GraphsPage> {
                     Expanded(
                       child: _buildChart(
                         'Total Weight',
-                        _totalWeightSpots,
+                        _graphDataService.totalWeightSpots,
                         Colors.amber,
                       ),
                     ),
@@ -202,7 +165,7 @@ class _GraphsPageState extends State<GraphsPage> {
                     Expanded(
                       child: _buildChart(
                         'Weight 1',
-                        _weight1Spots,
+                        _graphDataService.weight1Spots,
                         Colors.greenAccent,
                       ),
                     ),
@@ -210,7 +173,7 @@ class _GraphsPageState extends State<GraphsPage> {
                     Expanded(
                       child: _buildChart(
                         'Weight 2',
-                        _weight2Spots,
+                        _graphDataService.weight2Spots,
                         Colors.purpleAccent,
                       ),
                     ),
@@ -247,7 +210,7 @@ class _GraphsPageState extends State<GraphsPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF34495E),
+        color: const Color.fromARGB(255, 34, 51, 69),
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
@@ -399,7 +362,7 @@ class _LoadcellDataPageState extends State<LoadcellDataPage> {
         setState(() {
           _date = data['date']?.toString() ?? '--';
           _time = data['time']?.toString() ?? '--';
-          _systemTime = data['systemTime'].toString() ?? '--';
+          _systemTime = data['systemTime'].toString();
           _totalWeight = double.parse((data['totalWeight'] ?? 0).toString());
           _weight1 = double.parse((data['weight1'] ?? 0).toString());
           _weight2 = double.parse((data['weight2'] ?? 0).toString());
@@ -545,7 +508,6 @@ class _LoadcellDataPageState extends State<LoadcellDataPage> {
         children: [
           // Left weight pad
           _buildWeightPad(_weight1),
-
           // Right weight pad
           _buildWeightPad(_weight2),
         ],
