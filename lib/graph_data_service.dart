@@ -13,6 +13,11 @@ class GraphDataService {
   final List<FlSpot> weight2Spots = [];
   final List<FlSpot> totalWeightSpots = [];
 
+  // Add these new lists to store time values that correspond to each spot
+  final List<String> weight1Times = [];
+  final List<String> weight2Times = [];
+  final List<String> totalWeightTimes = [];
+
   // Maximum number of data points to keep
   final int maxDataPoints = 100;
 
@@ -79,23 +84,35 @@ class GraphDataService {
   }
 
   void _updateChartData(Map<dynamic, dynamic> data) {
-    final currentTime = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final timePoint = (currentTime - startTime).toDouble();
-
     final weight1 = double.parse((data['weight1'] ?? 0).toString());
     final weight2 = double.parse((data['weight2'] ?? 0).toString());
     final totalWeight = double.parse((data['totalWeight'] ?? 0).toString());
 
-    // Add new data points
-    weight1Spots.add(FlSpot(timePoint, weight1));
-    weight2Spots.add(FlSpot(timePoint, weight2));
-    totalWeightSpots.add(FlSpot(timePoint, totalWeight));
+    // Get the time from Firebase
+    final time = data['time']?.toString() ?? DateTime.now().toString();
+
+    // Add new data points - use index-based X values
+    final xValue = weight1Spots.isEmpty ? 0.0 : weight1Spots.last.x + 1.0;
+
+    weight1Spots.add(FlSpot(xValue, weight1));
+    weight2Spots.add(FlSpot(xValue, weight2));
+    totalWeightSpots.add(FlSpot(xValue, totalWeight));
+
+    // Store the time values
+    weight1Times.add(time);
+    weight2Times.add(time);
+    totalWeightTimes.add(time);
 
     // Limit to max data points
     if (weight1Spots.length > maxDataPoints) {
       weight1Spots.removeAt(0);
       weight2Spots.removeAt(0);
       totalWeightSpots.removeAt(0);
+
+      // Also remove the corresponding time values
+      weight1Times.removeAt(0);
+      weight2Times.removeAt(0);
+      totalWeightTimes.removeAt(0);
     }
 
     // Notify listeners

@@ -102,6 +102,23 @@ class _GraphsPageState extends State<GraphsPage> {
   // Local state to trigger rebuilds
   bool _hasData = false;
 
+  // Add touch state variables at class level
+  Map<String, bool> _isTouched = {
+    'totalWeight': false,
+    'weight1': false,
+    'weight2': false,
+  };
+  Map<String, double> _touchedValues = {
+    'totalWeight': 0,
+    'weight1': 0,
+    'weight2': 0,
+  };
+  Map<String, String> _touchedTimes = {
+    'totalWeight': '',
+    'weight1': '',
+    'weight2': '',
+  };
+
   @override
   void initState() {
     super.initState();
@@ -156,25 +173,28 @@ class _GraphsPageState extends State<GraphsPage> {
                   children: [
                     Expanded(
                       child: _buildChart(
-                        'Total Weight',
+                        'totalWeight',
                         _graphDataService.totalWeightSpots,
                         Colors.amber,
+                        _graphDataService.totalWeightTimes, // Pass time list
                       ),
                     ),
                     const SizedBox(height: 16),
                     Expanded(
                       child: _buildChart(
-                        'Weight 1',
+                        'weight1',
                         _graphDataService.weight1Spots,
                         Colors.greenAccent,
+                        _graphDataService.weight1Times, // Pass time list
                       ),
                     ),
                     const SizedBox(height: 16),
                     Expanded(
                       child: _buildChart(
-                        'Weight 2',
+                        'weight2',
                         _graphDataService.weight2Spots,
                         Colors.purpleAccent,
+                        _graphDataService.weight2Times, // Pass time list
                       ),
                     ),
                   ],
@@ -183,7 +203,12 @@ class _GraphsPageState extends State<GraphsPage> {
     );
   }
 
-  Widget _buildChart(String title, List<FlSpot> spots, Color color) {
+  Widget _buildChart(
+    String title,
+    List<FlSpot> spots,
+    Color color,
+    List<String> times,
+  ) {
     // Get min and max values for better scaling
     double minY = 0;
     double maxY = 10;
@@ -224,13 +249,24 @@ class _GraphsPageState extends State<GraphsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              // Show time and value when touched, using the class-level variables
+              if (_isTouched[title] == true)
+                Text(
+                  '${_touchedValues[title]?.toStringAsFixed(1)}g at ${_touchedTimes[title]}',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+            ],
           ),
           const SizedBox(height: 8),
           Expanded(
@@ -258,17 +294,28 @@ class _GraphsPageState extends State<GraphsPage> {
                       showTitles: true,
                       reservedSize: 30,
                       getTitlesWidget: (value, meta) {
-                        // Show time in seconds since start
-                        final seconds = value.toInt();
-                        if (seconds % 30 == 0) {
-                          // Show every 30 seconds
-                          return Text(
-                            '${seconds}s',
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 10,
-                            ),
-                          );
+                        // Show actual time values at intervals
+                        final int index = value.toInt();
+                        if (index >= 0 &&
+                            index < spots.length &&
+                            index % 5 == 0) {
+                          // Only show every 5th point to avoid overcrowding
+                          if (index < times.length) {
+                            // Extract just the time portion (assuming format like "12:34:56")
+                            final timeStr = times[index];
+                            final timeOnly =
+                                timeStr.contains(':')
+                                    ? timeStr.split(' ').last
+                                    : timeStr;
+
+                            return Text(
+                              timeOnly,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 10,
+                              ),
+                            );
+                          }
                         }
                         return const SizedBox();
                       },
@@ -300,24 +347,81 @@ class _GraphsPageState extends State<GraphsPage> {
                   show: true,
                   border: Border.all(color: const Color(0xFF536878), width: 1),
                 ),
-                minX: spots.isEmpty ? 0 : spots.first.x,
-                maxX: spots.isEmpty ? 60 : spots.last.x,
+                minX: spots.isEmpty ? 0 : 0,
+                maxX: spots.isEmpty ? 60 : (spots.length - 1).toDouble(),
                 minY: minY,
                 maxY: maxY,
                 lineBarsData: [
                   LineChartBarData(
                     spots: spots,
-                    // isCurved: true,
                     color: color,
                     barWidth: 3,
-                    // isStrokeCapRound: true,
-                    dotData: const FlDotData(show: false),
+                    dotData: FlDotData(show: false),
                     belowBarData: BarAreaData(
                       show: true,
                       color: color.withOpacity(0.2),
                     ),
                   ),
                 ],
+                lineTouchData: LineTouchData(
+                  touchTooltipData: LineTouchTooltipData(
+                    tooltipRoundedRadius: 8,
+                    getTooltipColor: (touchedSpot) {
+                      return Colors.black38;
+                    },
+                  ),
+                  touchCallback: (
+                    FlTouchEvent event,
+                    LineTouchResponse? touchResponse,
+                  ) {
+                    if (event is FlPanEndEvent || event is FlTapUpEvent) {
+                      setState(() {
+                        _isTouched[title] = false;
+                      });
+                      return;
+                    }
+
+                    if (touchResponse == null ||
+                        touchResponse.lineBarSpots == null ||
+                        touchResponse.lineBarSpots!.isEmpty) {
+                      setState(() {
+                        _isTouched[title] = false;
+                      });
+                      return;
+                    }
+
+                    final FlSpot spot = touchResponse.lineBarSpots!.first;
+                    final int spotIndex = spot.x.toInt();
+
+                    if (spotIndex >= 0 && spotIndex < times.length) {
+                      setState(() {
+                        _isTouched[title] = true;
+                        _touchedValues[title] = spot.y;
+                        _touchedTimes[title] = times[spotIndex];
+                      });
+                    }
+                  },
+                  getTouchedSpotIndicator: (
+                    LineChartBarData barData,
+                    List<int> spotIndexes,
+                  ) {
+                    return spotIndexes.map((spotIndex) {
+                      return TouchedSpotIndicatorData(
+                        FlLine(color: Colors.white, strokeWidth: 2),
+                        FlDotData(
+                          getDotPainter: (spot, percent, barData, index) {
+                            return FlDotCirclePainter(
+                              radius: 6,
+                              color: color,
+                              strokeWidth: 2,
+                              strokeColor: Colors.white,
+                            );
+                          },
+                        ),
+                      );
+                    }).toList();
+                  },
+                ),
               ),
             ),
           ),
@@ -339,7 +443,6 @@ class _LoadcellDataPageState extends State<LoadcellDataPage> {
     'loadcell',
   );
 
-  // Add this line to store the stream subscription
   StreamSubscription<DatabaseEvent>? _dataSubscription;
 
   String _date = '--';
@@ -353,7 +456,6 @@ class _LoadcellDataPageState extends State<LoadcellDataPage> {
   void initState() {
     super.initState();
 
-    // Store the subscription so we can cancel it later
     _dataSubscription = _databaseRef.onValue.listen((event) {
       if (event.snapshot.value != null && mounted) {
         Map<dynamic, dynamic> data =
@@ -371,7 +473,6 @@ class _LoadcellDataPageState extends State<LoadcellDataPage> {
     });
   }
 
-  // Add this method to cancel the listener when the widget is disposed
   @override
   void dispose() {
     _dataSubscription?.cancel();
