@@ -1,6 +1,8 @@
 # payloadsurveillanceapp
 
-A new Flutter project.
+A flutter app that shows the live readings and graphs of payload weights.
+
+This project is a part of the course ME304 Instrumentation and Control Systems, at IIT Indore, and was used to demonstrate a project regarding smart and wireless payload monitoring for heavy vehicles.
 
 ## Getting Started
 
